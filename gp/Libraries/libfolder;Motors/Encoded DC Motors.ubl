@@ -1,9 +1,9 @@
 module 'Encoded DC Motors' Output
 author 'Russell Owen'
-version 0 12 
+version 0 13 
 depends PID 
 description 'Drive DC motors with encoders'
-variables _edcmotors__initialized _edcmotors__running _edcmotors__numMotors _edcmotors__maxSpeed _edcmotors__accel _edcmotors__pinDutyCycle _edcmotors__pinEncoderA _edcmotors__pinEncoderB _edcmotors__pinDirection _edcmotors__targetStartMillis _edcmotors__targetList _edcmotors__pCoeff _edcmotors__iCoeff _edcmotors__dCoeff _edcmotors__deadband _edcmotors__minEffort _edcmotors__maxEffort _edcmotors__maxIntegral 
+variables _edcmotors__initialized _edcmotors__running _edcmotors__numMotors _edcmotors__timeoutMillis _edcmotors__maxSpeed _edcmotors__accel _edcmotors__pinDutyCycle _edcmotors__pinEncoderA _edcmotors__pinEncoderB _edcmotors__pinDirection _edcmotors__targetStartMillis _edcmotors__targetList _edcmotors__pCoeff _edcmotors__iCoeff _edcmotors__dCoeff _edcmotors__deadband _edcmotors__minEffort _edcmotors__maxEffort _edcmotors__maxIntegral 
 
   spec ' ' 'edcmotors_moveMotorAtSpeed' 'move motor _ at speed _ (encoder counts/sec)' 'num num' 1 500
   spec ' ' 'edcmotors_moveMotorDistance' 'move motor _ distance _ (encoder counts) at max speed _ (counts/sec)' 'num num num' 1 100 500
@@ -19,7 +19,7 @@ variables _edcmotors__initialized _edcmotors__running _edcmotors__numMotors _edc
   spec 'r' '_edcmotors_computePointToPointTargetList' '_compute a target list for a move of distance _ (encoder counts) max speed _ (counts/sec) accel _ (counts/sec^2)' 'num num num' 2000 1000 100
   spec 'r' '_edcmotors_computeShortPointToPointTargetList' '_compute a target list for a short move of distance _ (encoder counts) accel _ (counts/sec^2)' 'num num' 100 100
   spec ' ' '_edcmotors_driveMotorsToFollowTarget' '_drive motors to follow target'
-  spec 'r' '_edcmotors_getTargetPositionSpeedState' '_get target position and speed for motor _ at time _ (msec)' 'num num' 1 -1
+  spec 'r' '_edcmotors_getTargetPositionSpeedDurationState' '_get target position, speed, duration, and state for motor _ at time _ (msec)' 'num num' 1 -1
   spec 'r' '_edcmotors_addTime' '_add time _ duration _' 'num num' 0 0
   spec 'r' '_edcmotors_constrainSpeed' '_constrain speed for index _ desired speed _ (encoder counts/sec)' 'num num' 1 500
   spec ' ' '_edcmotors_initLibrary' '_edcmotors init library'
@@ -110,7 +110,7 @@ in order for edcmotors_moveMotorAtSpeed and edcmotors_moveMotorDistance to work.
     pid_resetPID index
   }
   '_edcmotors_initLibrary'
-  local 'targetPositionSpeedState' 0
+  local 'targetPositionSpeedDurationState' 0
   local 'positionError' 0
   local 'correction' 0
   local 'effort' 0
@@ -118,14 +118,14 @@ in order for edcmotors_moveMotorAtSpeed and edcmotors_moveMotorDistance to work.
   forever {
     for index _edcmotors__numMotors {
       if ((at index _edcmotors__targetStartMillis) >= 0) {
-        targetPositionSpeedState = ('_edcmotors_getTargetPositionSpeedState' index (millisOp))
-        if (and ((at 3 targetPositionSpeedState) > 0) (edcmotors_isRunning index)) {
+        targetPositionSpeedDurationState = ('_edcmotors_getTargetPositionSpeedDurationState' index (millisOp))
+        if (and ((at 4 targetPositionSpeedDurationState) > 0) (edcmotors_isRunning index)) {
           comment 'Either we are still in the path (state=1) or the path has ended (state=2) and we have not yet arrived'
           comment 'Note: simple subtraction handles encoder wraparound automatically'
-          positionError = ((at 1 targetPositionSpeedState) - ('[encoder:count]' index))
+          positionError = ((at 1 targetPositionSpeedDurationState) - ('[encoder:count]' index))
           correction = (pid_computePID index positionError (at index _edcmotors__pCoeff) (at index _edcmotors__iCoeff) (at index _edcmotors__dCoeff) (at index _edcmotors__maxIntegral))
           comment 'Compute predicted ("feed forward") effort.'
-          effort = (((at 2 targetPositionSpeedState) * (at index _edcmotors__maxEffort)) / (at index _edcmotors__maxSpeed))
+          effort = (((at 2 targetPositionSpeedDurationState) * (at index _edcmotors__maxEffort)) / (at index _edcmotors__maxSpeed))
           comment 'If the predicted effort is too small to be useful, set it to 0,
   in order to make the system more stable at the start and end of each move.'
           if ((absoluteValue effort) < (at index _edcmotors__maxEffort)) {
@@ -136,8 +136,11 @@ in order for edcmotors_moveMotorAtSpeed and edcmotors_moveMotorDistance to work.
           comment 'Check that following is still wanted, just before commanding the motor.'
           if ((at index _edcmotors__targetStartMillis) >= 0) {
             '_edcmotors_basicMoveMotorWithEffort' index effort
-            if (and ((at 3 targetPositionSpeedState) == 2) (effort == 0)) {
+            if (and ((at 4 targetPositionSpeedDurationState) == 2) (effort == 0)) {
               comment 'We have arrived'
+              '_edcmotors_setRunning' index (booleanConstant false)
+            } (and ((at 4 targetPositionSpeedDurationState) == 2) ((at 3 targetPositionSpeedDurationState) > _edcmotors__timeoutMillis)) {
+              comment 'Move timed out'
               '_edcmotors_setRunning' index (booleanConstant false)
             } else {
               '_edcmotors_setRunning' index (booleanConstant true)
@@ -151,11 +154,12 @@ in order for edcmotors_moveMotorAtSpeed and edcmotors_moveMotorDistance to work.
   }
 }
 
-to '_edcmotors_getTargetPositionSpeedState' index atMillis {
-  comment 'Compute target position, speed, running for the specified motor at the specified time (msec).
-Return a list with three elements:
+to '_edcmotors_getTargetPositionSpeedDurationState' index atMillis {
+  comment 'Compute target position, speed, state for the specified motor at the specified time (msec).
+Return a list with four elements:
 * target position (encoder counts)
 * target speed (encoder counts/second)
+* duration of this segment (millis)
 * state, an enum with values: 1=no path, 2=in path, 3=at end of path, holding final position
 Assumes that _edcmotors_initLibrary has been called.'
   local 'durationMillis' 0
@@ -168,7 +172,7 @@ Assumes that _edcmotors_initLibrary has been called.'
     if (or ((size targetList) == 0) (at index _edcmotors__targetStartMillis)) {
       comment 'No path'
       '_edcmotors_setRunning' index (booleanConstant false)
-      return ('[data:makeList]' 0 0 0)
+      return ('[data:makeList]' 0 0 0 0)
     }
     durationMillis = (millisSince (at index _edcmotors__targetStartMillis) atMillis)
     targetDurationPositionSpeedAccel = (at 1 targetList)
@@ -176,7 +180,7 @@ Assumes that _edcmotors_initLibrary has been called.'
       comment 'Use this segment'
       position = (((at 2 targetDurationPositionSpeedAccel) + (((at 3 targetDurationPositionSpeedAccel) * durationMillis) / 1000)) + (((((at 4 targetDurationPositionSpeedAccel) * durationMillis) / 1000) * durationMillis) / 2000))
       speed = ((at 3 targetDurationPositionSpeedAccel) + (((at 4 targetDurationPositionSpeedAccel) * durationMillis) / 1000))
-      return ('[data:makeList]' position speed 1)
+      return ('[data:makeList]' position speed durationMillis 1)
     } ((size targetList) > 1) {
       comment 'This segment has expired and we have another; discard it and try the next (if any)'
       local 'oldStartTime' (at index _edcmotors__targetStartMillis)
@@ -185,9 +189,9 @@ Assumes that _edcmotors_initLibrary has been called.'
       '[data:delete]' 1 targetList
     } else {
       comment 'We have finished the final segment; assume we hold the final position'
-      durationMillis = (at 1 targetDurationPositionSpeedAccel)
-      position = (((at 2 targetDurationPositionSpeedAccel) + (((at 3 targetDurationPositionSpeedAccel) * durationMillis) / 1000)) + (((((at 4 targetDurationPositionSpeedAccel) * durationMillis) / 1000) * durationMillis) / 2000))
-      return ('[data:makeList]' position 0 2)
+      local 'endDurationMillis' (at 1 targetDurationPositionSpeedAccel)
+      position = (((at 2 targetDurationPositionSpeedAccel) + (((at 3 targetDurationPositionSpeedAccel) * endDurationMillis) / 1000)) + (((((at 4 targetDurationPositionSpeedAccel) * endDurationMillis) / 1000) * endDurationMillis) / 2000))
+      return ('[data:makeList]' position 0 (durationMillis - endDurationMillis) 2)
     }
   }
 }
@@ -198,6 +202,7 @@ Check motor power and initialize variables (if not already initialized).
 Defaults to an XRP robot kit with 2 motors; change this code for other systems'
   if (not _edcmotors__initialized) {
     _edcmotors__numMotors = (edcmotors_getNumMotors)
+    _edcmotors__timeoutMillis = 1000
     if (_edcmotors__numMotors == 0) {
       sayIt 'Error: edcmotors_getNumMotors is not defined, or is defined but returned 0'
       return
