@@ -878,21 +878,67 @@ method saveScripts MicroBlocksScripter oldScale {
 
 method storeUndoState MicroBlocksScripter {
 	if (count undoStack > 100) { removeFirst undoStack }
-	add undoStack (codeString mbProject)
+	// store both the latest project state, current category and scrollbar
+	// positions
+	add undoStack (array
+		(codeString mbProject)
+		(currentCategory this)
+		(viewPortState this)
+	)
+}
+
+method viewPortState MicroBlocksScripter {
+	hand = (hand (global 'page'))
+	return (array
+		(width (morph categorySelector))
+		(width (morph blocksFrame))
+		(blockScale)
+		(bounds (morph (scriptEditor this)))
+		(array (x hand) (y hand))
+	)
+}
+
+method restoreViewPort MicroBlocksScripter viewPortState {
+	setGlobal 'svgCache' (dictionary)
+	editor = (findMicroBlocksEditor)
+
+	catWidth = (at viewPortState 1)
+	paletteWidth = (at viewPortState 2)
+	blockZoom = (at viewPortState 3)
+	scriptBounds = (at viewPortState 4)
+	handPosition = (at viewPortState 5)
+
+	setExtent (morph categorySelector) catWidth (height (morph categorySelector))
+	setExtent (morph blocksFrame) paletteWidth (height (morph blocksFrame))
+	setBlockScalePercent editor (blockZoom * 100)
+	setBounds (morph editor) scriptBounds
+	fixLayout this
 }
 
 method undo MicroBlocksScripter {
+	setCursor 'wait'
 	if (notEmpty undoStack) {
-		projectString = (removeLast undoStack)
+		lastState = (removeLast undoStack)
+		projectString = (at lastState 1)
+		lastCategory = (at lastState 2)
+		viewPortState = (at lastState 3)
+		saveNeeded = false // don't save scripts while project is loading
 		if (notNil projectString) {
-			saveNeeded = false // don't save scripts while project is loading
 			loadFromString mbProject projectString false
+			if (notNil lastCategory) {
+				selectCategory this lastCategory
+			} else {
+				selectCategory this 'cat;Output'
+			}
 			restoreScripts this
+			//restoreViewPort this viewPortState // fails miserably :(
+			spotCursor (findMicroBlocksEditor) (at viewPortState 5)
 		}
 	} else {
-		removeAllParts (morph scriptsPane)
-		restoreScripts this false
+		clearProject (findMicroBlocksEditor)
+		selectCategory this 'cat;Output'
 	}
+	setCursor 'default'
 }
 
 method updateFunctionOrMethod MicroBlocksScripter script {

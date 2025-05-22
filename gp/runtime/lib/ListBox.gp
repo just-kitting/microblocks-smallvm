@@ -69,7 +69,7 @@ method select ListBox aListItem silently {
 	if (not silently) {
 		if (notNil selection) {call onSelect selection}
 	}
-	call onPreselect this
+	if (notNil onPreselect) {call onPreselect this}
 }
 
 method selectedMorph ListBox {

@@ -26,7 +26,7 @@ to uload fileName {
 	return (load fileName (topLevelModule))
 }
 
-defineClass MicroBlocksEditor morph fileName scripter leftItems title rightItems tipBar zoomButtons scriptingActionsContainer connectionWidget progressIndicator httpServer lastProjectFolder lastScriptPicFolder boardLibAutoLoadDisabled autoDecompile showHiddenBlocks frameRate frameCount lastFrameTime newerVersion putNextDroppedFileOnBoard isDownloading isPilot darkMode versionCheckOnStartup
+defineClass MicroBlocksEditor morph fileName scripter leftItems title rightItems tipBar zoomButtons scriptingActionsContainer connectionWidget progressIndicator httpServer lastProjectFolder lastScriptPicFolder boardLibAutoLoadDisabled autoDecompile showHiddenBlocks frameRate frameCount lastFrameTime newerVersion putNextDroppedFileOnBoard isDownloading isPilot darkMode versionCheckOnStartup cursorSpotter
 
 method scriptingActionsContainer MicroBlocksEditor { return scriptingActionsContainer }
 method fileName MicroBlocksEditor { return fileName }
@@ -35,6 +35,32 @@ method scripter MicroBlocksEditor { return scripter }
 method httpServer MicroBlocksEditor { return httpServer }
 method lastScriptPicFolder MicroBlocksEditor { return lastScriptPicFolder }
 method setLastScriptPicFolder MicroBlocksEditor dir { lastScriptPicFolder = dir }
+method spotCursor MicroBlocksEditor cursorPos {
+	if (isNil cursorPos) {
+		hand = (hand (global 'page'))
+		cursorPos = (array (x hand) (y hand))
+	}
+
+	if (isNil cursorSpotter) {
+		cursorSpotter = (newMorph)
+		setCostume cursorSpotter (readSVGIcon 'cursor-spotter')
+		addPart (global 'page') cursorSpotter
+	}
+
+	setLeft cursorSpotter ((at cursorPos 1) - 14)
+	setTop cursorSpotter ((at cursorPos 2) - 14)
+	show cursorSpotter
+
+	flash = (action
+		(function m startTime {
+			if (((msecsSinceStart) % 200) > 100) { hide m } else { show m }
+		})
+		cursorSpotter (msecsSinceStart)
+	)
+
+	doneAction = (action (function m { hide m }) cursorSpotter)
+	addSchedule (global 'page') (newAnimation 0 0 500 flash doneAction false)
+}
 
 to openMicroBlocksEditor devMode {
 	if (isNil devMode) { devMode = false }
