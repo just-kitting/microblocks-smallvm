@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: interest@microblocks.fun\n"
 "POT-Creation-Date: 2024-10-28 16:43+0200\n"
-"PO-Revision-Date: 2025-05-18 15:11+0000\n"
+"PO-Revision-Date: 2025-05-22 11:05+0000\n"
 "Last-Translator: Ralf Krause <ralf.krause@moodleschule.de>\n"
 "Language-Team: German <https://hosted.weblate.org/projects/microblocks/ide/"
 "de/>\n"
@@ -106,7 +106,7 @@ msgstr "gehe zu x _ y _"
 
 #. Example string for ( (prefix) begins with (pre) )
 msgid "prefix"
-msgstr "Prefix"
+msgstr "prefix"
 
 #. Example text for lowercase and uppercase Strings library block
 msgid "THIS is a String! :)"
@@ -678,7 +678,7 @@ msgstr "Kommunikation"
 
 #. Block in Data category
 msgid "new list length _"
-msgstr "neue Liste Länge _"
+msgstr "neue Liste _"
 
 #. NeoPixel library block
 msgid "set NeoPixel _ color _"
@@ -687,7 +687,7 @@ msgstr "setze NeoPixel _ auf Farbe _"
 #. Example value for the ( copy (smiles) from 2 > ) block, which will become "miles" when run.
 #. You could think of a word that still has meaning when you remove its first character in your language.
 msgid "smiles"
-msgstr "lächeln"
+msgstr "smiles"
 
 #. Block in Data category
 msgid "item _ of _"
@@ -1118,7 +1118,7 @@ msgstr "Liste oder Text"
 
 #. TCS34725 color sensor library block
 msgid "color _ name"
-msgstr "Farbe _ Name"
+msgstr "Farbname _"
 
 #. Fractions library block
 msgid "fract _ = _"
@@ -2379,7 +2379,9 @@ msgstr "Projekt wird vom Board gelesen..."
 
 #. MicroBlocks IDE information
 msgid "Use \"Connect\" button to connect to a MicroBlocks device."
-msgstr "Klicke auf \"Verbinden\", um dein Board mit MicroBlocks zu verbinden."
+msgstr ""
+"Klicke auf die Taste \"verbinden\", um dein Board mit MicroBlocks zu "
+"verbinden."
 
 #. MicroBlocks IDE error message.
 msgid "The board is not responding."
@@ -5596,7 +5598,7 @@ msgstr "ms Knopf _ ?"
 
 #. micro:STEAMakers library block
 msgid "ms touching ?"
-msgstr "ms Berührung?"
+msgstr "ms Logo berührt?"
 
 #. micro:STEAMakers library block
 msgid "ms light"
@@ -6686,7 +6688,7 @@ msgstr "SCD40 relative Luftfeuchtigkeit (%)"
 
 #. Firmware install instruction
 msgid "Do not switch browser tabs!"
-msgstr "Wechsle keine Browser-Tabs!"
+msgstr "Wechsle keinen Tab im Browser!"
 
 #. Gas (SCD40) library block
 msgid "°F"
@@ -6752,3 +6754,8 @@ msgstr "#SVG#wave-sawtooth Gate _"
 #. only translate "gate _" as in a synthesizer sound gate that can be triggered
 msgid "#SVG#wave-noise gate _"
 msgstr "#SVG#wave-noise Gate _"
+
+#. MicroBlocks IDE information
+msgid "Reconnect to the board by clicking the \"Connect\" button."
+msgstr ""
+"Verbinde dich neu mit deinem Board. Klicke dafür auf die Taste \"verbinden\"."
