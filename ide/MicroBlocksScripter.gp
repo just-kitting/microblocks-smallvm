@@ -888,13 +888,12 @@ method storeUndoState MicroBlocksScripter {
 }
 
 method viewPortState MicroBlocksScripter {
-	hand = (hand (global 'page'))
 	return (array
 		(width (morph categorySelector))
 		(width (morph blocksFrame))
 		(blockScale)
 		(bounds (morph (scriptEditor this)))
-		(array (x hand) (y hand))
+		(array (self_mouseX) (self_mouseY))
 	)
 }
 
