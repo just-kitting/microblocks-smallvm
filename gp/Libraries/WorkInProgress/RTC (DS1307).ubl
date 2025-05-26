@@ -1,0 +1,162 @@
+module 'RTC (DS1307)'
+author 'Ralf Krause'
+version 1 1 
+choices DS1307_weekday 'DS1307;Monday' 'DS1307;Tuesday' 'DS1307;Wednesday' 'DS1307;Thursday' 'DS1307;Friday' 'DS1307;Saturday' 'DS1307;Sunday' 
+choices DS1307_mode12 'a.m.' 'p.m.' 
+description 'RTC (DS1307)
+
+The DS1307 is an i2c device (0x68) with a clock, a calendar, and 56 bytes of battery-backed SRAM. The DS1307 provides seconds, minutes, hours, weekday, day, month, and year. The end of a month is automatically adjusted for months with fewer than 31 days, including corrections for leap years. 
+https://www.analog.com/media/en/technical-documentation/data-sheets/ds1307.pdf
+'
+
+  spec 'r' 'DS1307 hour' 'DS1307 hour'
+  spec 'r' 'DS1307 minute' 'DS1307 minute'
+  spec 'r' 'DS1307 second' 'DS1307 second'
+  spec 'r' 'DS1307 get time' 'DS1307 get time'
+  spec ' ' 'DS1307 set time' 'DS1307 set time to _ _ _' 'num num num' 12 0 0
+  space
+  spec 'r' 'DS1307 hour12' 'DS1307 hour12'
+  spec 'r' 'DS1307 get time12' 'DS1307 get time12'
+  spec ' ' 'DS1307 set time12' 'DS1307 set time12 to _ _ _ _' 'num num num menu.DS1307_mode12' 12 0 0 'a.m.'
+  space
+  spec 'r' 'DS1307 weekday' 'DS1307 weekday'
+  spec 'r' 'DS1307 day' 'DS1307 day'
+  spec 'r' 'DS1307 month' 'DS1307 month'
+  spec 'r' 'DS1307 year' 'DS1307 year'
+  spec 'r' 'DS1307 get date' 'DS1307 get date'
+  spec ' ' 'DS1307 set date' 'DS1307 set date to _ _ _ _ (d/m/y)' 'menu.DS1307_weekday num num num' 'DS1307;Monday' 1 1 2025
+  space
+  spec ' ' 'DS1307 start clock' 'DS1307 start clock'
+  spec ' ' 'DS1307 stop clock' 'DS1307 stop clock'
+  space
+  spec 'r' '_DS1307_address' '_DS1307_address'
+  spec 'r' '_DS1307_bcd2dec' '_DS1307_bcd2dec _' 'num' 32
+  spec 'r' '_DS1307_dec2bcd' '_DS1307_dec2bcd _' 'num' 16
+  spec 'r' '_DS1307_00' '_DS1307_00 _' 'num' 7
+
+to 'DS1307 day' {
+  return ('_DS1307_bcd2dec' (i2cGet ('_DS1307_address') 4))
+}
+
+to 'DS1307 get date' {
+  return ('[data:join]' ('_DS1307_00' ('DS1307 day')) '.' ('_DS1307_00' ('DS1307 month')) '.' ('DS1307 year'))
+}
+
+to 'DS1307 get time' {
+  return ('[data:join]' ('_DS1307_00' ('DS1307 hour')) ':' ('_DS1307_00' ('DS1307 minute')) ':' ('_DS1307_00' ('DS1307 second')))
+}
+
+to 'DS1307 get time12' {
+  local 'hour' ('[data:split]' ('DS1307 hour12') ' ')
+  return ('[data:join]' (at 1 hour) ':' ('_DS1307_00' ('DS1307 minute')) ':' ('_DS1307_00' ('DS1307 second')) ' ' (at 2 hour))
+}
+
+to 'DS1307 hour' {
+  return ('_DS1307_bcd2dec' (i2cGet ('_DS1307_address') 2))
+}
+
+to 'DS1307 hour12' {
+  local 'hour' ('DS1307 hour')
+  local 'mode' 'a.m.'
+  if (or (hour > 12) (hour == 0)) {
+    mode = 'p.m.'
+    if (and (hour == 0) (or (('DS1307 minute') > 0) (('DS1307 second') > 0))) {
+      mode = 'a.m.'
+    }
+    hour = (hour % 12)
+    if (hour == 0) {
+      hour = 12
+    }
+  } else {
+    if (and (hour == 12) (or (('DS1307 minute') > 0) (('DS1307 second') > 0))) {mode = 'p.m.'}
+  }
+  return ('[data:join]' hour ' ' mode)
+}
+
+to 'DS1307 minute' {
+  return ('_DS1307_bcd2dec' (i2cGet ('_DS1307_address') 1))
+}
+
+to 'DS1307 month' {
+  return ('_DS1307_bcd2dec' (i2cGet ('_DS1307_address') 5))
+}
+
+to 'DS1307 second' {
+  return ('_DS1307_bcd2dec' ((i2cGet ('_DS1307_address') 0) & (hexToInt '7F')))
+}
+
+to 'DS1307 set date' weekday day month year {
+  local 'names' ('[data:makeList]' 'DS1307;Monday' 'DS1307;Tuesday' 'DS1307;Wednesday' 'DS1307;Thursday' 'DS1307;Friday' 'DS1307;Saturday' 'DS1307;Sunday')
+  local 'n' ('[data:find]' weekday names)
+  local 'date' ('[data:makeList]' (hexToInt '03'))
+  '[data:addLast]' ('_DS1307_dec2bcd' (n % 8)) date
+  '[data:addLast]' ('_DS1307_dec2bcd' (day % 32)) date
+  '[data:addLast]' ('_DS1307_dec2bcd' (month % 13)) date
+  '[data:addLast]' ('_DS1307_dec2bcd' (year % 2000)) date
+  '[sensors:i2cWrite]' ('_DS1307_address') date
+}
+
+to 'DS1307 set time' hour minute second {
+  local 'time' ('[data:makeList]' (hexToInt '00'))
+  '[data:addLast]' ('_DS1307_dec2bcd' (second % 60)) time
+  '[data:addLast]' ('_DS1307_dec2bcd' (minute % 60)) time
+  '[data:addLast]' ('_DS1307_dec2bcd' (hour % 24)) time
+  '[sensors:i2cWrite]' ('_DS1307_address') time
+}
+
+to 'DS1307 set time12' hour minute second mode {
+  if (and (0 < hour) (hour <= 12)) {
+    if (mode == 'a.m.') {
+      if (hour == 12) {if (or (minute > 0) (second > 0)) {
+        hour = 0
+      }}
+    } else {
+      if (hour == 12) {
+        if (and (minute == 0) (second == 0)) {hour = 0}
+      } else {
+        hour = ((hour + 12) % 24)
+      }
+    }
+    'DS1307 set time' hour minute second
+  }
+}
+
+to 'DS1307 start clock' {
+  local 'second' (i2cGet ('_DS1307_address') 0)
+  i2cSet ('_DS1307_address') 0 (second & (hexToInt '7F'))
+}
+
+to 'DS1307 stop clock' {
+  local 'second' (i2cGet ('_DS1307_address') 0)
+  i2cSet ('_DS1307_address') 0 (second | (hexToInt '80'))
+}
+
+to 'DS1307 weekday' {
+  return ('_DS1307_bcd2dec' (i2cGet ('_DS1307_address') 3))
+}
+
+to 'DS1307 year' {
+  return (2000 + ('_DS1307_bcd2dec' (i2cGet ('_DS1307_address') 6)))
+}
+
+to '_DS1307_00' val {
+  local 's' ''
+  if (val < 10) {
+    s = 0
+  }
+  s = ('[data:join]' s val)
+  return s
+}
+
+to '_DS1307_address' {
+  return (hexToInt '68')
+}
+
+to '_DS1307_bcd2dec' val {
+  return (((val / 16) * 10) + (val % 16))
+}
+
+to '_DS1307_dec2bcd' val {
+  return (((val / 10) * 16) + (val % 10))
+}
+

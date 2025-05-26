@@ -1,0 +1,75 @@
+module 'Real Time Clock (KidsBits)' Input
+author MicroBlocks
+version 1 0 
+choices rtc_timeOrDate 'rtc;time' 'rtc;date' 
+description 'Real time clock (RTC).
+
+Simple functions to set and read the current time and date of a real-time clock module.
+With a 3V coin cell battery intalled, the clock will maintain the time and date while powered off.
+
+Currently supports the DS1307 chip but this library may be extended to support other RTC chips in the future.
+
+(Many thanks to Ralf Kraus.)
+'
+
+  spec 'r' 'rtc_getTimeOrDate' '#SVG#square11#00c612 get _' 'menu.rtc_timeOrDate' 'rtc;time'
+  spec ' ' 'rtc_setTime' '#SVG#square11#00c612 set hours _ minutes _ seconds _' 'num num num' 9 30 0
+  spec ' ' 'rtc_setDate' '#SVG#square11#00c612 set day _ month _ year _' 'num num num' 1 1 2025
+  space
+  spec 'r' '_rtc_bcd2dec' '_rtc_bcd2dec _' 'num'
+  spec 'r' '_rtc_dec2bcd' '_rtc_dec2bcd _' 'num'
+  spec 'r' '_rtc_twoDigit' '_rtc_twoDigit _' 'num'
+
+to '_rtc_bcd2dec' bcd {
+  comment 'Convert an 8-bit "binary-coded decimal" number to a decimal number in range 0-99'
+  return (((bcd / 16) * 10) + (bcd % 16))
+}
+
+to '_rtc_dec2bcd' decimal {
+  comment 'Convert a decimal in range 0-99 to an 8-bit "binary-coded decimal" value.'
+  decimal = (maximum 0 (minimum decimal 99))
+  return (((decimal / 10) * 16) + (decimal % 10))
+}
+
+to '_rtc_twoDigit' n {
+  comment 'Return a two-digit decimal representation for n (range 0-99).'
+  decimal = (maximum 0 (minimum n 99))
+  return ('[data:join]' (ifExpression (n < 10) '0' '') n)
+}
+
+to rtc_getTimeOrDate which {
+  local 'i2cAddr' (hexToInt '68')
+  if ('rtc;time' == which) {
+    local 'hour' ('_rtc_bcd2dec' (i2cGet i2cAddr 2))
+    local 'minute' ('_rtc_bcd2dec' (i2cGet i2cAddr 1))
+    local 'second' ('_rtc_bcd2dec' ((i2cGet i2cAddr 0) & 127))
+    return ('[data:join]' ('_rtc_twoDigit' hour) ':' ('_rtc_twoDigit' minute) ':' ('_rtc_twoDigit' second))
+  } else {
+    local 'day' ('_rtc_bcd2dec' (i2cGet i2cAddr 4))
+    local 'month' ('_rtc_bcd2dec' (i2cGet i2cAddr 5))
+    local 'year' (('_rtc_bcd2dec' (i2cGet i2cAddr 6)) + 2000)
+    return ('[data:join]' ('_rtc_twoDigit' day) '.' ('_rtc_twoDigit' month) '.' year)
+  }
+}
+
+to rtc_setDate day month year {
+  local 'i2cAddr' (hexToInt '68')
+  day = (maximum 1 (minimum day 31))
+  month = (maximum 1 (minimum month 12))
+  year = (maximum 0 (minimum (year - 2000) 99))
+  i2cSet i2cAddr 4 ('_rtc_dec2bcd' day)
+  i2cSet i2cAddr 5 ('_rtc_dec2bcd' month)
+  i2cSet i2cAddr 6 ('_rtc_dec2bcd' year)
+}
+
+to rtc_setTime hours minutes seconds {
+  comment 'Clock is running (bit 7 of seconds = 0) using 24-hour time (bit 6 of hours = 0). '
+  local 'i2cAddr' (hexToInt '68')
+  hours = (maximum 0 (minimum hours 23))
+  minutes = (maximum 0 (minimum minutes 59))
+  seconds = (maximum 0 (minimum seconds 59))
+  i2cSet i2cAddr 0 ('_rtc_dec2bcd' seconds)
+  i2cSet i2cAddr 1 ('_rtc_dec2bcd' minutes)
+  i2cSet i2cAddr 2 ('_rtc_dec2bcd' hours)
+}
+

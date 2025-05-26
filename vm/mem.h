@@ -50,6 +50,10 @@ extern "C" {
 	#define RP2040_PHILHOWER 1
 #endif
 
+#if defined(XRP) && defined(PICO_RP2350) && (PICO_RP2350A == 0)
+	#define XRP_2350 1
+#endif
+
 #if defined(BLE_IDE) || defined(BLE_KEYBOARD) || defined(BLE_UART) || defined(BLE_OCTO)
 	#define USE_NIMBLE 1
 #endif

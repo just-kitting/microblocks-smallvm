@@ -1,15 +1,14 @@
 module 'LCD 16x2 (Seeed)' Output
 author 'Ralf Krause'
-version 1 1 
+version 1 2 
 description 'LCD 16x2 (Seeed)
-Seeed Studio supplies four 16x2 LCD displays with Grove i2c connectors. Each display has 2 rows and 16 columns. The LCD RGB display has a multicolor backlight. All four v5.0 LCD displays are compatible with 3.3 and 5 volts and work seamlessly with Micro:bit and Calliope mini.
+
+Seeed Studio supplies four 16x2 LCD displays with Grove i2c connectors. The LCD RGB display has a multicolor backlight. The LCD displays (monochrome v2.0, RGB v5.0) are compatible with 3.3 and 5 volts so they work fine with Micro:bit and Calliope mini.
 https://wiki.seeedstudio.com/Grove-16x2_LCD_Series
 https://wiki.seeedstudio.com/Grove-LCD_RGB_Backlight/
+https://files.seeedstudio.com/wiki/Grove-16x2_LCD_Series/res/JDH_1804_Datasheet.pdf
 
-The display controller JHD1802 (with HD44780 in core) has the i2c address 0x3E (decimal 62). The LCD RGB display v5.0 uses the RGB led driver SGM31323 with the i2c address 0x30 (decimal 48).
-https://github.com/Seeed-Studio/Grove_LCD_RGB_Backlight
-
-This library allows to write the german umlauts ÄÖÜäöüß. The chars ÄÖÜ are not in the standard list of the LCDs. We are using the Character Generator RAM (CGRAM) for 8 addional characters. To generate own special characters or mini icons you should look into the blocks _LCD_init_german_chars and _LCD_init_some_icons.
+The library allows to write german umlauts ÄÖÜäöüß on the display. The chars ÄÖÜ are not in the standard char list and we are using the CGRAM for these addional characters. To generate your own special characters or mini icons you should look into the blocks _LCD_init_german_chars and _LCD_init_some_icons.
 '
 variables _LCD_ADDR _LCD_LOCK_MSECS 
 
@@ -86,7 +85,7 @@ to LCD_init_display {
     '[sensors:i2cSetClockSpeed]' 400000
     comment 'add german umlauts ÄÖÜ'
     '_LCD_init_german_chars'
-    comment 'for RGB displays set the backlight to grey'
+    comment 'for RGB display set the backlight to grey'
     LCD_set_RGB_background (colorSwatch 30 20 20 255)
   } else {
     comment 'LCD could not be found'

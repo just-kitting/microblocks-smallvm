@@ -991,6 +991,20 @@ void hardwareInit() {
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		0, 0, 0, 1, 1, 1, 0, 0, 0, 0};
 
+#elif defined(XRP_2350)
+	#define BOARD_TYPE "XRP RP2350"
+	#define DIGITAL_PINS 47
+	#define ANALOG_PINS 4
+	#define TOTAL_PINS DIGITAL_PINS
+	static const int analogPin[] = {A0, A1, A2, A3};
+	#define PIN_BUTTON_A 36
+	static const char reservedPin[TOTAL_PINS] = {
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 1, 1, 1, 1,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0};
+
 #elif defined(TTGO_RP2040) // must come before ARDUINO_ARCH_RP2040
 
 	#define BOARD_TYPE "TTGO RP2040"
@@ -1060,13 +1074,8 @@ void hardwareInit() {
 	#else
 		#if defined(XRP)
 			#undef BOARD_TYPE
-			#if defined(RP2350)
-				#define BOARD_TYPE "RP2350 XRP"
-				#define PIN_BUTTON_A 22
-			#else
-				#define BOARD_TYPE "RP2040 XRP"
-				#define PIN_BUTTON_A 22
-			#endif
+			#define BOARD_TYPE "RP2040 XRP"
+			#define PIN_BUTTON_A 22
 		#elif defined(GIZMO_MECHATRONICS)
 			#undef BOARD_TYPE
 			#define BOARD_TYPE "RP2040 Gizmo"
@@ -1333,6 +1342,9 @@ static void initPins(void) {
 
 void turnOffPins() {
 	for (int pin = 0; pin < TOTAL_PINS; pin++) {
+		#if defined(ARDUINO_ARCH_ESP32) || defined(ARDUINO_SAMD_ATMEL_SAMW25_XPRO) || defined(ARDUINO_ARCH_RP2040)
+			if (RESERVED(pin)) continue;
+		#endif
 		int turnOffPin = ((OUTPUT == currentMode[pin]) || (INPUT_PULLUP == currentMode[pin]));
 		#if defined(HAS_INPUT_PULLDOWN)
 			if (INPUT_PULLDOWN == currentMode[pin]) turnOffPin = true;
