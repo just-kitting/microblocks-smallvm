@@ -1,0 +1,291 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+// linuxI2CTargetSimPrims.c - Simulated I2C target primitives for the Linux VM.
+// These primitives use a simple request/response spool directory so host-side
+// tools can emulate an I2C controller talking to MicroBlocks code.
+
+#include <dirent.h>
+#include <errno.h>
+#include <limits.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include "mem.h"
+#include "interp.h"
+
+#define DEFAULT_SIM_DIR "/tmp/microblocks_i2c_target_sim"
+#define MAX_REQUEST_ID_LEN 32
+#ifndef PATH_MAX
+#define PATH_MAX 512
+#endif
+
+static int configuredAddress = -1;
+static int activeReadLength = 0;
+static char activeRequestID[MAX_REQUEST_ID_LEN];
+static uint32 emptyByteArray = HEADER(ByteArrayType, 0);
+
+static const char *simDir() {
+	const char *dir = getenv("MICROBLOCKS_I2C_SIM_DIR");
+	if (dir && dir[0]) return dir;
+	return DEFAULT_SIM_DIR;
+}
+
+static int ensureDirectory(const char *path) {
+	struct stat info;
+	if (0 == stat(path, &info)) return S_ISDIR(info.st_mode);
+	return (0 == mkdir(path, 0777)) || (EEXIST == errno);
+}
+
+static void clearActiveRequest() {
+	activeRequestID[0] = 0;
+	activeReadLength = 0;
+}
+
+static void buildRequestPath(char *dst, size_t dstSize, int address, const char *requestID) {
+	snprintf(dst, dstSize, "%s/request-%02d-%s.bin", simDir(), address, requestID);
+}
+
+static void buildResponsePath(char *dst, size_t dstSize, int address, const char *requestID) {
+	snprintf(dst, dstSize, "%s/response-%02d-%s.bin", simDir(), address, requestID);
+}
+
+static int readFileBytes(const char *path, uint8 **dataOut, int *byteCountOut) {
+	FILE *file = fopen(path, "rb");
+	if (!file) return false;
+	if (0 != fseek(file, 0, SEEK_END)) {
+		fclose(file);
+		return false;
+	}
+	long byteCount = ftell(file);
+	if (byteCount < 0) {
+		fclose(file);
+		return false;
+	}
+	if (0 != fseek(file, 0, SEEK_SET)) {
+		fclose(file);
+		return false;
+	}
+
+	uint8 *data = NULL;
+	if (byteCount > 0) {
+		data = (uint8 *) malloc(byteCount);
+		if (!data) {
+			fclose(file);
+			return false;
+		}
+		if (byteCount != fread(data, 1, byteCount, file)) {
+			free(data);
+			fclose(file);
+			return false;
+		}
+	}
+	fclose(file);
+	*dataOut = data;
+	*byteCountOut = (int) byteCount;
+	return true;
+}
+
+static int writeFileBytes(const char *path, const uint8 *data, int byteCount) {
+	FILE *file = fopen(path, "wb");
+	if (!file) return false;
+	if (byteCount > 0) {
+		int bytesWritten = fwrite(data, 1, byteCount, file);
+		if (bytesWritten != byteCount) {
+			fclose(file);
+			return false;
+		}
+	}
+	fclose(file);
+	return true;
+}
+
+static int parseRequestFileName(const char *name, int *addressOut, char *requestIDOut, size_t requestIDSize) {
+	int address = -1;
+	char requestID[MAX_REQUEST_ID_LEN];
+	if (2 != sscanf(name, "request-%02d-%31[^.].bin", &address, requestID)) return false;
+	if ((address < 0) || (address > 127)) return false;
+	snprintf(requestIDOut, requestIDSize, "%s", requestID);
+	*addressOut = address;
+	return true;
+}
+
+static int findOldestRequest(int address, char *requestIDOut, size_t requestIDSize) {
+	DIR *dir = opendir(simDir());
+	if (!dir) return false;
+
+	struct dirent *entry = NULL;
+	unsigned long long bestID = 0;
+	int found = false;
+	char bestRequestID[MAX_REQUEST_ID_LEN];
+
+	while ((entry = readdir(dir)) != NULL) {
+		int entryAddress = -1;
+		char requestID[MAX_REQUEST_ID_LEN];
+		if (!parseRequestFileName(entry->d_name, &entryAddress, requestID, sizeof(requestID))) continue;
+		if (entryAddress != address) continue;
+		unsigned long long parsedID = strtoull(requestID, NULL, 10);
+		if (!found || (parsedID < bestID)) {
+			bestID = parsedID;
+			snprintf(bestRequestID, sizeof(bestRequestID), "%s", requestID);
+			found = true;
+		}
+	}
+	closedir(dir);
+	if (!found) return false;
+	snprintf(requestIDOut, requestIDSize, "%s", bestRequestID);
+	return true;
+}
+
+static int objToBytes(OBJ obj, uint8 *dst, int maxCount) {
+	if (isInt(obj)) {
+		int value = obj2int(obj);
+		if (((uint32) value) > 255) {
+			fail(byteOutOfRange);
+			return -1;
+		}
+		if (maxCount < 1) return 0;
+		dst[0] = value & 255;
+		return 1;
+	}
+
+	if (IS_TYPE(obj, ByteArrayType)) {
+		int byteCount = BYTES(obj);
+		if (byteCount > maxCount) byteCount = maxCount;
+		memcpy(dst, (uint8 *) &FIELD(obj, 0), byteCount);
+		return byteCount;
+	}
+
+	if (IS_TYPE(obj, ListType)) {
+		int count = obj2int(FIELD(obj, 0));
+		if (count > maxCount) count = maxCount;
+		for (int i = 0; i < count; i++) {
+			OBJ item = FIELD(obj, i + 1);
+			if (!isInt(item)) {
+				fail(needsListOfIntegers);
+				return -1;
+			}
+			int value = obj2int(item);
+			if (((uint32) value) > 255) {
+				fail(byteOutOfRange);
+				return -1;
+			}
+			dst[i] = value & 255;
+		}
+		return count;
+	}
+
+	fail(needsByteArray);
+	return -1;
+}
+
+static OBJ primStart(int argCount, OBJ *args) {
+	if ((argCount < 1) || !isInt(args[0])) return fail(needsIntegerError);
+	int address = obj2int(args[0]);
+	if ((address < 0) || (address > 127)) return fail(i2cDeviceIDOutOfRange);
+	if (!ensureDirectory(simDir())) return falseObj;
+	configuredAddress = address;
+	clearActiveRequest();
+	return trueObj;
+}
+
+static OBJ primStop(int argCount, OBJ *args) {
+	configuredAddress = -1;
+	clearActiveRequest();
+	return falseObj;
+}
+
+static OBJ primIsStarted(int argCount, OBJ *args) {
+	return (configuredAddress >= 0) ? trueObj : falseObj;
+}
+
+static OBJ primAddress(int argCount, OBJ *args) {
+	return int2obj((configuredAddress >= 0) ? configuredAddress : -1);
+}
+
+static OBJ primHasRequest(int argCount, OBJ *args) {
+	if (configuredAddress < 0) return falseObj;
+	char requestID[MAX_REQUEST_ID_LEN];
+	return findOldestRequest(configuredAddress, requestID, sizeof(requestID)) ? trueObj : falseObj;
+}
+
+static OBJ primReceive(int argCount, OBJ *args) {
+	if (configuredAddress < 0) return (OBJ) &emptyByteArray;
+	if (activeRequestID[0]) return (OBJ) &emptyByteArray;
+
+	char requestID[MAX_REQUEST_ID_LEN];
+	if (!findOldestRequest(configuredAddress, requestID, sizeof(requestID))) {
+		return (OBJ) &emptyByteArray;
+	}
+
+	char requestPath[PATH_MAX];
+	buildRequestPath(requestPath, sizeof(requestPath), configuredAddress, requestID);
+
+	uint8 *data = NULL;
+	int byteCount = 0;
+	if (!readFileBytes(requestPath, &data, &byteCount)) return (OBJ) &emptyByteArray;
+	if (byteCount < 4) {
+		free(data);
+		unlink(requestPath);
+		return (OBJ) &emptyByteArray;
+	}
+
+	activeReadLength = (int) (data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24));
+	snprintf(activeRequestID, sizeof(activeRequestID), "%s", requestID);
+
+	int payloadBytes = byteCount - 4;
+	if (0 != unlink(requestPath)) {
+		free(data);
+		clearActiveRequest();
+		return (OBJ) &emptyByteArray;
+	}
+
+	OBJ result = newObj(ByteArrayType, (payloadBytes + 3) / 4, falseObj);
+	if (!result) {
+		free(data);
+		clearActiveRequest();
+		return fail(insufficientMemoryError);
+	}
+	if (payloadBytes > 0) memcpy((uint8 *) &FIELD(result, 0), data + 4, payloadBytes);
+	setByteCountAdjust(result, payloadBytes);
+	free(data);
+	return result;
+}
+
+static OBJ primRequestedBytes(int argCount, OBJ *args) {
+	return int2obj(activeReadLength);
+}
+
+static OBJ primReply(int argCount, OBJ *args) {
+	if ((configuredAddress < 0) || !activeRequestID[0] || (argCount < 1)) return falseObj;
+
+	uint8 buffer[512];
+	int byteCount = objToBytes(args[0], buffer, sizeof(buffer));
+	if (byteCount < 0) return falseObj;
+
+	char responsePath[PATH_MAX];
+	buildResponsePath(responsePath, sizeof(responsePath), configuredAddress, activeRequestID);
+	int ok = writeFileBytes(responsePath, buffer, byteCount);
+	clearActiveRequest();
+	return ok ? trueObj : falseObj;
+}
+
+static PrimEntry entries[] = {
+	{"start", primStart},
+	{"stop", primStop},
+	{"isStarted", primIsStarted},
+	{"address", primAddress},
+	{"hasRequest", primHasRequest},
+	{"receive", primReceive},
+	{"requestedBytes", primRequestedBytes},
+	{"reply", primReply},
+};
+
+void addI2CTargetSimPrims() {
+	addPrimitiveSet("i2ctarget", sizeof(entries) / sizeof(PrimEntry), entries);
+}

@@ -348,6 +348,9 @@ void addSensorPrims();
 void addSerialPrims();
 void addTFTPrims();
 void addVarPrims();
+#ifdef GNUBLOCKS
+void addI2CTargetSimPrims();
+#endif
 
 // Named Primitive Support
 

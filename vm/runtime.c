@@ -134,6 +134,9 @@ void primsInit() {
 	addSerialPrims();
 	addTFTPrims();
 	addVarPrims();
+#ifdef GNUBLOCKS
+	addI2CTargetSimPrims();
+#endif
 }
 
 // Task Ops

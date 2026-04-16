@@ -20,7 +20,7 @@ gcc -m32 -std=c99 -Wall -Wno-unused-variable -Wno-unused-result -O3 \
 	-I ../vm \
 	linux.c ../vm/*.c \
 	linuxFilePrims.c linuxIOPrims.c linuxNetPrims.c \
-	linuxOutputPrims.c linuxSensorPrims.c linuxTftPrims.c \
+	linuxOutputPrims.c linuxSensorPrims.c linuxTftPrims.c linuxI2CTargetSimPrims.c \
 	libs/libSDL2.a \
 	libs/libSDL2_ttf.a \
 	libs/libfreetype.a \
