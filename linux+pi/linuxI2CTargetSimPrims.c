@@ -26,8 +26,7 @@
 #endif
 
 static int configuredAddress = -1;
-static int activeReadLength = 0;
-static char activeRequestID[MAX_REQUEST_ID_LEN];
+static char activeReadID[MAX_REQUEST_ID_LEN];
 static uint32 emptyByteArray = HEADER(ByteArrayType, 0);
 
 static const char *simDir() {
@@ -43,16 +42,19 @@ static int ensureDirectory(const char *path) {
 }
 
 static void clearActiveRequest() {
-	activeRequestID[0] = 0;
-	activeReadLength = 0;
+	activeReadID[0] = 0;
 }
 
-static void buildRequestPath(char *dst, size_t dstSize, int address, const char *requestID) {
-	snprintf(dst, dstSize, "%s/request-%02d-%s.bin", simDir(), address, requestID);
+static void buildWritePath(char *dst, size_t dstSize, int address, const char *requestID) {
+	snprintf(dst, dstSize, "%s/write-%02d-%s.bin", simDir(), address, requestID);
 }
 
 static void buildResponsePath(char *dst, size_t dstSize, int address, const char *requestID) {
 	snprintf(dst, dstSize, "%s/response-%02d-%s.bin", simDir(), address, requestID);
+}
+
+static void buildReadPath(char *dst, size_t dstSize, int address, const char *requestID) {
+	snprintf(dst, dstSize, "%s/read-%02d-%s.bin", simDir(), address, requestID);
 }
 
 static int readFileBytes(const char *path, uint8 **dataOut, int *byteCountOut) {
@@ -105,17 +107,19 @@ static int writeFileBytes(const char *path, const uint8 *data, int byteCount) {
 	return true;
 }
 
-static int parseRequestFileName(const char *name, int *addressOut, char *requestIDOut, size_t requestIDSize) {
+static int parseRequestFileName(const char *name, const char *kind, int *addressOut, char *requestIDOut, size_t requestIDSize) {
 	int address = -1;
 	char requestID[MAX_REQUEST_ID_LEN];
-	if (2 != sscanf(name, "request-%02d-%31[^.].bin", &address, requestID)) return false;
+	char format[64];
+	snprintf(format, sizeof(format), "%s-%%02d-%%31[^.].bin", kind);
+	if (2 != sscanf(name, format, &address, requestID)) return false;
 	if ((address < 0) || (address > 127)) return false;
 	snprintf(requestIDOut, requestIDSize, "%s", requestID);
 	*addressOut = address;
 	return true;
 }
 
-static int findOldestRequest(int address, char *requestIDOut, size_t requestIDSize) {
+static int findOldestRequest(const char *kind, int address, char *requestIDOut, size_t requestIDSize) {
 	DIR *dir = opendir(simDir());
 	if (!dir) return false;
 
@@ -127,7 +131,7 @@ static int findOldestRequest(int address, char *requestIDOut, size_t requestIDSi
 	while ((entry = readdir(dir)) != NULL) {
 		int entryAddress = -1;
 		char requestID[MAX_REQUEST_ID_LEN];
-		if (!parseRequestFileName(entry->d_name, &entryAddress, requestID, sizeof(requestID))) continue;
+		if (!parseRequestFileName(entry->d_name, kind, &entryAddress, requestID, sizeof(requestID))) continue;
 		if (entryAddress != address) continue;
 		unsigned long long parsedID = strtoull(requestID, NULL, 10);
 		if (!found || (parsedID < bestID)) {
@@ -208,68 +212,67 @@ static OBJ primAddress(int argCount, OBJ *args) {
 	return int2obj((configuredAddress >= 0) ? configuredAddress : -1);
 }
 
-static OBJ primHasRequest(int argCount, OBJ *args) {
+static OBJ primWriteAvailable(int argCount, OBJ *args) {
 	if (configuredAddress < 0) return falseObj;
 	char requestID[MAX_REQUEST_ID_LEN];
-	return findOldestRequest(configuredAddress, requestID, sizeof(requestID)) ? trueObj : falseObj;
+	return findOldestRequest("write", configuredAddress, requestID, sizeof(requestID)) ? trueObj : falseObj;
 }
 
-static OBJ primReceive(int argCount, OBJ *args) {
+static OBJ primReceiveWrite(int argCount, OBJ *args) {
 	if (configuredAddress < 0) return (OBJ) &emptyByteArray;
-	if (activeRequestID[0]) return (OBJ) &emptyByteArray;
 
 	char requestID[MAX_REQUEST_ID_LEN];
-	if (!findOldestRequest(configuredAddress, requestID, sizeof(requestID))) {
+	if (!findOldestRequest("write", configuredAddress, requestID, sizeof(requestID))) {
 		return (OBJ) &emptyByteArray;
 	}
 
 	char requestPath[PATH_MAX];
-	buildRequestPath(requestPath, sizeof(requestPath), configuredAddress, requestID);
+	buildWritePath(requestPath, sizeof(requestPath), configuredAddress, requestID);
 
 	uint8 *data = NULL;
 	int byteCount = 0;
 	if (!readFileBytes(requestPath, &data, &byteCount)) return (OBJ) &emptyByteArray;
-	if (byteCount < 4) {
-		free(data);
-		unlink(requestPath);
-		return (OBJ) &emptyByteArray;
-	}
-
-	activeReadLength = (int) (data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24));
-	snprintf(activeRequestID, sizeof(activeRequestID), "%s", requestID);
-
-	int payloadBytes = byteCount - 4;
 	if (0 != unlink(requestPath)) {
 		free(data);
-		clearActiveRequest();
 		return (OBJ) &emptyByteArray;
 	}
 
-	OBJ result = newObj(ByteArrayType, (payloadBytes + 3) / 4, falseObj);
+	OBJ result = newObj(ByteArrayType, (byteCount + 3) / 4, falseObj);
 	if (!result) {
 		free(data);
-		clearActiveRequest();
 		return fail(insufficientMemoryError);
 	}
-	if (payloadBytes > 0) memcpy((uint8 *) &FIELD(result, 0), data + 4, payloadBytes);
-	setByteCountAdjust(result, payloadBytes);
+	if (byteCount > 0) memcpy((uint8 *) &FIELD(result, 0), data, byteCount);
+	setByteCountAdjust(result, byteCount);
 	free(data);
 	return result;
 }
 
-static OBJ primRequestedBytes(int argCount, OBJ *args) {
-	return int2obj(activeReadLength);
+static OBJ primReadRequested(int argCount, OBJ *args) {
+	if (configuredAddress < 0) return falseObj;
+	if (activeReadID[0]) return trueObj;
+
+	char requestID[MAX_REQUEST_ID_LEN];
+	if (!findOldestRequest("read", configuredAddress, requestID, sizeof(requestID))) {
+		return falseObj;
+	}
+
+	char readPath[PATH_MAX];
+	buildReadPath(readPath, sizeof(readPath), configuredAddress, requestID);
+	if (0 != unlink(readPath)) return falseObj;
+	snprintf(activeReadID, sizeof(activeReadID), "%s", requestID);
+	return trueObj;
 }
 
 static OBJ primReply(int argCount, OBJ *args) {
-	if ((configuredAddress < 0) || !activeRequestID[0] || (argCount < 1)) return falseObj;
+	if ((configuredAddress < 0) || !activeReadID[0] || (argCount < 1)) return falseObj;
 
 	uint8 buffer[512];
 	int byteCount = objToBytes(args[0], buffer, sizeof(buffer));
 	if (byteCount < 0) return falseObj;
 
 	char responsePath[PATH_MAX];
-	buildResponsePath(responsePath, sizeof(responsePath), configuredAddress, activeRequestID);
+	buildResponsePath(responsePath, sizeof(responsePath), configuredAddress, activeReadID);
 	int ok = writeFileBytes(responsePath, buffer, byteCount);
 	clearActiveRequest();
 	return ok ? trueObj : falseObj;
@@ -280,9 +283,9 @@ static PrimEntry entries[] = {
 	{"stop", primStop},
 	{"isStarted", primIsStarted},
 	{"address", primAddress},
-	{"hasRequest", primHasRequest},
-	{"receive", primReceive},
-	{"requestedBytes", primRequestedBytes},
+	{"writeAvailable", primWriteAvailable},
+	{"receiveWrite", primReceiveWrite},
+	{"readRequested", primReadRequested},
 	{"reply", primReply},
 };
 

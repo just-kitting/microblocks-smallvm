@@ -16,9 +16,9 @@ static OBJ primStart(int argCount, OBJ *args) { return falseObj; }
 static OBJ primStop(int argCount, OBJ *args) { return falseObj; }
 static OBJ primIsStarted(int argCount, OBJ *args) { return falseObj; }
 static OBJ primAddress(int argCount, OBJ *args) { return int2obj(-1); }
-static OBJ primHasRequest(int argCount, OBJ *args) { return falseObj; }
-static OBJ primReceive(int argCount, OBJ *args) { return (OBJ) &emptyByteArray; }
-static OBJ primRequestedBytes(int argCount, OBJ *args) { return zeroObj; }
+static OBJ primWriteAvailable(int argCount, OBJ *args) { return falseObj; }
+static OBJ primReceiveWrite(int argCount, OBJ *args) { return (OBJ) &emptyByteArray; }
+static OBJ primReadRequested(int argCount, OBJ *args) { return falseObj; }
 static OBJ primReply(int argCount, OBJ *args) { return falseObj; }
 
 static PrimEntry entries[] = {
@@ -26,9 +26,9 @@ static PrimEntry entries[] = {
 	{"stop", primStop},
 	{"isStarted", primIsStarted},
 	{"address", primAddress},
-	{"hasRequest", primHasRequest},
-	{"receive", primReceive},
-	{"requestedBytes", primRequestedBytes},
+	{"writeAvailable", primWriteAvailable},
+	{"receiveWrite", primReceiveWrite},
+	{"readRequested", primReadRequested},
 	{"reply", primReply},
 };
 
