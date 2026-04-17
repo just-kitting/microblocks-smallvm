@@ -12,6 +12,69 @@
       <script>var Module = {};</script>
       <script type="text/javascript" src="run_boardie.js"></script>
       <script>
+          (function () {
+              var state = {
+                  nextID: 1,
+                  writes: {},
+                  reads: {},
+                  responses: {},
+              };
+
+              function key(address) { return String(address); }
+              function bucket(store, address) {
+                  var k = key(address);
+                  if (!store[k]) store[k] = [];
+                  return store[k];
+              }
+              function responseBucket(address) {
+                  var k = key(address);
+                  if (!state.responses[k]) state.responses[k] = {};
+                  return state.responses[k];
+              }
+
+              window.BadgeSnakeI2CTarget = {
+                  clearAddress: function (address) {
+                      delete state.writes[key(address)];
+                      delete state.reads[key(address)];
+                      delete state.responses[key(address)];
+                  },
+                  enqueueWrite: function (address, data) {
+                      var id = state.nextID++;
+                      bucket(state.writes, address).push({
+                          id: id,
+                          data: Uint8Array.from(data || []),
+                      });
+                      return id;
+                  },
+                  enqueueRead: function (address) {
+                      var id = state.nextID++;
+                      bucket(state.reads, address).push({ id: id });
+                      return id;
+                  },
+                  peekWrite: function (address) {
+                      var writes = bucket(state.writes, address);
+                      return writes.length ? writes[0] : null;
+                  },
+                  shiftWrite: function (address) {
+                      var writes = bucket(state.writes, address);
+                      return writes.length ? writes.shift() : null;
+                  },
+                  shiftRead: function (address) {
+                      var reads = bucket(state.reads, address);
+                      return reads.length ? reads.shift() : null;
+                  },
+                  storeResponse: function (address, id, data) {
+                      responseBucket(address)[String(id)] = Uint8Array.from(data || []);
+                  },
+                  takeResponse: function (address, id) {
+                      var responses = responseBucket(address);
+                      var result = responses[String(id)];
+                      delete responses[String(id)];
+                      return result || null;
+                  },
+              };
+          })();
+
           function press(keycode) { keys.set(keycode, true) };
           function unpress(keycode) { keys.set(keycode, false); };
       </script>

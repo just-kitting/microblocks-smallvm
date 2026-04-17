@@ -1,15 +1,16 @@
-const version = 7; // increment version to force local cache flush of wasm files
+const version = 8; // increment version to force local cache flush of wasm files
 
 var cacheName = 'MicroBlocks';
 var filesToCache = [
-  '/run/',
-  '/run/microblocks.html',
-  '/run/emModule.js',
-  '/run/gpSupport.js',
-  '/run/FileSaver.js',
-  '/run/gp_wasm.js',
-  '/run/gp_wasm.wasm',
-  '/run/gp_wasm.data',
+  './',
+  './microblocks.html',
+  './emModule.js',
+  './gpSupport.js',
+  './badgesnake-boardie.js',
+  './FileSaver.js',
+  './gp_wasm.js',
+  './gp_wasm.wasm',
+  './gp_wasm.data',
 ];
 
 /* Start the service worker and cache all of the app's content */
