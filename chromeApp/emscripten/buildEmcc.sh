@@ -43,18 +43,17 @@ pathPrims.c prims.c serialPortPrims.c sha1.c sha2.c soundPrims.c textAndFontPrim
 --preload-file esp32 \
 --preload-file runtime \
 --preload-file translations \
--o gp_wasm.html
+-o gp_wasm.js
 
 # copy the compiler output files to the webapp folder
 cp gp_wasm.js ../webapp
 cp gp_wasm.wasm ../webapp
 cp gp_wasm.data ../webapp
 
-# move the compiler output files into the MicroBlocks folder and remove unused gp_wasm.html
+# move the compiler output files into the MicroBlocks folder
 mv gp_wasm.js ../MicroBlocks
 mv gp_wasm.wasm ../MicroBlocks
 mv gp_wasm.data ../MicroBlocks
-rm gp_wasm.html
 
 # remove copied folders after build
 rm -r Examples

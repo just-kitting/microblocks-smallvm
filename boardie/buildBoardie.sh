@@ -8,7 +8,6 @@ emcc -std=gnu99 -Wall -O3 \
 	-D GNUBLOCKS \
 	-s TOTAL_MEMORY=268435456 \
 	-s ALLOW_MEMORY_GROWTH=0 \
-	--closure 1 \
 	-s WASM=1 \
 	-sEXPORTED_FUNCTIONS=_main,_getScripts,_yield,_tftChanged \
 	-I ../vm \
