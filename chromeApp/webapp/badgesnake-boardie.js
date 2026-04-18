@@ -1,6 +1,33 @@
 (function () {
+  const BRIDGE_NEXT_PATH = '/api/i2c/next';
+  const BRIDGE_RESPOND_PATH = '/api/i2c/respond';
+  let bridgeStarted = false;
+
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async function postJSON(path, body) {
+    const response = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw new Error(`request failed: ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async function getJSON(path) {
+    const response = await fetch(path, {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      throw new Error(`request failed: ${response.status}`);
+    }
+    return response.json();
   }
 
   function normalizeBytes(value) {
@@ -81,5 +108,42 @@
     },
   };
 
+  async function handleBridgeRequest(request) {
+    const response = await api.transaction(request.address, request.write || [], {
+      timeoutMs: request.timeout_ms || 5000,
+      pollMs: 50,
+    });
+    await postJSON(BRIDGE_RESPOND_PATH, {
+      id: request.id,
+      response: response,
+    });
+  }
+
+  async function bridgeLoop() {
+    for (;;) {
+      try {
+        const result = await getJSON(`${BRIDGE_NEXT_PATH}?timeout_ms=1000`);
+        if (!result.request) {
+          await sleep(100);
+          continue;
+        }
+        await handleBridgeRequest(result.request);
+      } catch (error) {
+        console.warn('boardie i2c bridge error', error);
+        await sleep(500);
+      }
+    }
+  }
+
+  function startBridge() {
+    if (bridgeStarted) return;
+    bridgeStarted = true;
+    bridgeLoop();
+  }
+
+  api.startBridge = startBridge;
+
   window.BadgeSnakeBoardie = api;
+  window.BoardieI2C = api;
+  startBridge();
 })();
